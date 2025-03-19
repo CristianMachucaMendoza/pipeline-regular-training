@@ -4,12 +4,9 @@ Description: DAG for periodic training of fraud detection model with Dataproc an
 """
 
 import uuid
-import json
-import requests
 from datetime import datetime, timedelta
 from airflow import DAG
-from airflow.operators.python import PythonOperator, BranchPythonOperator
-from airflow.operators.dummy import DummyOperator
+from airflow.operators.python import PythonOperator
 from airflow.settings import Session
 from airflow.models import Connection, Variable
 from airflow.utils.trigger_rule import TriggerRule
@@ -102,158 +99,9 @@ def run_setup_connections(**kwargs): # pylint: disable=unused-argument
     return True
 
 
-# Функция для получения метрик последней успешной модели из MLflow
-def get_best_model_metrics(**kwargs):
-    """
-    Получает метрики лучшей модели из MLflow
-
-    Returns
-    -------
-    dict
-        Словарь с метриками лучшей модели или пустой словарь, если модели нет
-    """
-    import mlflow
-    from mlflow.tracking import MlflowClient
-
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    client = MlflowClient()
-
-    # Получаем ID эксперимента
-    experiment = client.get_experiment_by_name(MLFLOW_EXPERIMENT_NAME)
-    if not experiment:
-        print(f"Эксперимент {MLFLOW_EXPERIMENT_NAME} не найден. Создаем новый.")
-        experiment_id = client.create_experiment(MLFLOW_EXPERIMENT_NAME)
-    else:
-        experiment_id = experiment.experiment_id
-
-    # Получаем все запуски для эксперимента
-    runs = client.search_runs(
-        experiment_ids=[experiment_id],
-        filter_string="attributes.status = 'FINISHED'",
-        order_by=["metrics.auc DESC"]
-    )
-
-    if not runs:
-        print("Нет завершенных запусков для эксперимента.")
-        return {}
-
-    # Получаем лучший запуск по метрике AUC
-    best_run = runs[0]
-    best_metrics = {
-        "run_id": best_run.info.run_id,
-        "auc": best_run.data.metrics.get("auc", 0),
-        "accuracy": best_run.data.metrics.get("accuracy", 0),
-        "f1": best_run.data.metrics.get("f1", 0)
-    }
-
-    print(f"Лучшая модель: {best_metrics}")
-    return best_metrics
-
-
-# Функция для сравнения метрик новой модели с лучшей моделью
-def compare_model_metrics(**kwargs):
-    """
-    Сравнивает метрики новой модели с лучшей моделью и решает,
-    использовать ли новую модель или оставить старую
-
-    Returns
-    -------
-    str
-        Путь в DAG: 'use_new_model' или 'keep_current_model'
-    """
-    ti = kwargs['ti']
-
-    # Получаем метрики лучшей модели
-    best_model_metrics = ti.xcom_pull(task_ids='get_best_model_metrics')
-
-    # Если нет лучшей модели, используем новую
-    if not best_model_metrics:
-        print("Нет предыдущей модели. Используем новую модель.")
-        return 'use_new_model'
-
-    # Получаем метрики новой модели из MLflow
-    import mlflow
-    from mlflow.tracking import MlflowClient
-
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    client = MlflowClient()
-
-    # Получаем ID последнего запуска
-    experiment = client.get_experiment_by_name(MLFLOW_EXPERIMENT_NAME)
-    runs = client.search_runs(
-        experiment_ids=[experiment.experiment_id],
-        filter_string="attributes.status = 'FINISHED'",
-        order_by=["attributes.start_time DESC"],
-        max_results=1
-    )
-
-    if not runs:
-        print("Не удалось получить информацию о новой модели.")
-        return 'keep_current_model'
-
-    new_run = runs[0]
-    new_metrics = {
-        "run_id": new_run.info.run_id,
-        "auc": new_run.data.metrics.get("auc", 0),
-        "accuracy": new_run.data.metrics.get("accuracy", 0),
-        "f1": new_run.data.metrics.get("f1", 0)
-    }
-
-    print(f"Новая модель: {new_metrics}")
-
-    # Сравниваем метрики
-    if new_metrics["auc"] > best_model_metrics["auc"]:
-        print("Новая модель лучше. Используем новую модель.")
-        return 'use_new_model'
-    else:
-        print("Текущая модель лучше. Оставляем текущую модель.")
-        return 'keep_current_model'
-
-
-# Функция для регистрации новой модели как production
-def register_new_model(**kwargs):
-    """
-    Регистрирует новую модель как production в MLflow
-    """
-    import mlflow
-    from mlflow.tracking import MlflowClient
-
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    client = MlflowClient()
-
-    # Получаем ID последнего запуска
-    experiment = client.get_experiment_by_name(MLFLOW_EXPERIMENT_NAME)
-    runs = client.search_runs(
-        experiment_ids=[experiment.experiment_id],
-        filter_string="attributes.status = 'FINISHED'",
-        order_by=["attributes.start_time DESC"],
-        max_results=1
-    )
-
-    if not runs:
-        print("Не удалось получить информацию о новой модели.")
-        return
-
-    new_run = runs[0]
-    run_id = new_run.info.run_id
-
-    # Регистрируем модель
-    model_uri = f"runs:/{run_id}/model"
-    model_details = mlflow.register_model(model_uri=model_uri, name="fraud_detection_model")
-
-    # Устанавливаем тег production
-    client.transition_model_version_stage(
-        name="fraud_detection_model",
-        version=model_details.version,
-        stage="Production"
-    )
-
-    print(f"Модель {model_details.name} версии {model_details.version} зарегистрирована как Production")
-
-
 # Настройки DAG
 default_args = {
-    'owner': 'airflow',
+    'owner': 'NickOsipov',
     'depends_on_past': False,
     'email_on_failure': False,
     'email_on_retry': False,
@@ -265,8 +113,8 @@ with DAG(
     dag_id="fraud_detection_training",
     default_args=default_args,
     description="Periodic training of fraud detection model",
-    schedule_interval=timedelta(days=1),  # Запуск раз в день
-    start_date=datetime(2023, 1, 1),
+    schedule_interval=timedelta(minutes=30),  # Запуск каждые 30 минут
+    start_date=datetime(2025, 3, 19),
     catchup=False,
     tags=['mlops', 'fraud_detection'],
 ) as dag:
@@ -274,12 +122,6 @@ with DAG(
     setup_connections = PythonOperator(
         task_id="setup_connections",
         python_callable=run_setup_connections,
-    )
-
-    # Получение метрик лучшей модели
-    get_best_model = PythonOperator(
-        task_id="get_best_model_metrics",
-        python_callable=get_best_model_metrics,
     )
 
     # Создание Dataproc кластера
@@ -316,31 +158,9 @@ with DAG(
             "--output", f"{S3_OUTPUT_MODEL_BUCKET}fraud_model_{datetime.now().strftime('%Y%m%d')}",
             "--model-type", "rf",
             "--tracking-uri", MLFLOW_TRACKING_URI,
-            "--experiment-name", MLFLOW_EXPERIMENT_NAME
+            "--experiment-name", MLFLOW_EXPERIMENT_NAME,
+            "--auto-register"  # Включаем автоматическую регистрацию лучшей модели
         ],
-    )
-
-    # Сравнение метрик моделей
-    compare_models = BranchPythonOperator(
-        task_id="compare_model_metrics",
-        python_callable=compare_model_metrics,
-    )
-
-    # Использование новой модели
-    use_new_model = PythonOperator(
-        task_id="use_new_model",
-        python_callable=register_new_model,
-    )
-
-    # Оставление текущей модели
-    keep_current_model = DummyOperator(
-        task_id="keep_current_model",
-    )
-
-    # Объединение путей
-    join_paths = DummyOperator(
-        task_id="join_paths",
-        trigger_rule=TriggerRule.ONE_SUCCESS,
     )
 
     # Удаление Dataproc кластера
@@ -350,5 +170,5 @@ with DAG(
     )
 
     # Определение последовательности выполнения задач
-    setup_connections >> get_best_model >> create_cluster >> train_model >> compare_models
-    compare_models >> [use_new_model, keep_current_model] >> join_paths >> delete_cluster
+    # pylint: disable=pointless-statement
+    setup_connections >> create_cluster >> train_model >> delete_cluster

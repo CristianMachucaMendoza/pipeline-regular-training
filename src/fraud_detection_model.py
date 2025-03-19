@@ -8,6 +8,7 @@ import sys
 import argparse
 import mlflow
 import mlflow.spark
+from mlflow.tracking import MlflowClient
 from pyspark.sql import SparkSession
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import VectorAssembler, StandardScaler
@@ -220,6 +221,7 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
         print(f"F1 Score: {f1}")
 
         metrics = {
+            "run_id": run_id,
             "auc": auc,
             "accuracy": accuracy,
             "f1": f1
@@ -243,6 +245,127 @@ def save_model(model, output_path):
     print(f"Model saved to: {output_path}")
 
 
+def get_best_model_metrics(experiment_name):
+    """
+    Получает метрики лучшей модели из MLflow
+
+    Parameters
+    ----------
+    experiment_name : str
+        Название эксперимента в MLflow
+
+    Returns
+    -------
+    dict
+        Словарь с метриками лучшей модели или пустой словарь, если модели нет
+    """
+
+    client = MlflowClient()
+
+    # Получаем ID эксперимента
+    experiment = client.get_experiment_by_name(experiment_name)
+    if not experiment:
+        print(f"Эксперимент {experiment_name} не найден. Создаем новый.")
+        experiment_id = client.create_experiment(experiment_name)
+    else:
+        experiment_id = experiment.experiment_id
+
+    # Получаем все запуски для эксперимента
+    runs = client.search_runs(
+        experiment_ids=[experiment_id],
+        filter_string="attributes.status = 'FINISHED'",
+        order_by=["metrics.auc DESC"]
+    )
+
+    if not runs:
+        print("Нет завершенных запусков для эксперимента.")
+        return {}
+
+    # Получаем лучший запуск по метрике AUC
+    best_run = runs[0]
+    best_metrics = {
+        "run_id": best_run.info.run_id,
+        "auc": best_run.data.metrics.get("auc", 0),
+        "accuracy": best_run.data.metrics.get("accuracy", 0),
+        "f1": best_run.data.metrics.get("f1", 0)
+    }
+
+    print(f"Лучшая существующая модель: {best_metrics}")
+    return best_metrics
+
+
+def compare_and_register_model(new_metrics, experiment_name):
+    """
+    Сравнивает метрики новой модели с лучшей моделью
+    и регистрирует новую модель если она лучше
+
+    Parameters
+    ----------
+    new_metrics : dict
+        Метрики новой модели
+    experiment_name : str
+        Название эксперимента в MLflow
+
+    Returns
+    -------
+    bool
+        True если новая модель лучше, False если нет
+    """
+    # Получаем метрики лучшей модели
+    best_model_metrics = get_best_model_metrics(experiment_name)
+
+    # Если нет лучшей модели, считаем новую лучшей
+    if not best_model_metrics:
+        print("Нет предыдущей модели. Регистрируем новую модель как лучшую.")
+        register_model_as_production(new_metrics["run_id"], experiment_name)
+        return True
+
+    # Сравниваем метрики
+    print(f"Сравниваем метрики: текущая лучшая модель AUC={best_model_metrics['auc']}, новая модель AUC={new_metrics['auc']}")
+
+    if new_metrics["auc"] > best_model_metrics["auc"]:
+        print("Новая модель лучше. Регистрируем новую модель.")
+        register_model_as_production(new_metrics["run_id"], experiment_name)
+        return True
+    else:
+        print("Текущая модель лучше. Оставляем текущую модель.")
+        return False
+
+
+def register_model_as_production(run_id, experiment_name):
+    """
+    Регистрирует модель из указанного запуска как production
+
+    Parameters
+    ----------
+    run_id : str
+        ID запуска в MLflow
+    experiment_name : str
+        Название эксперимента в MLflow
+
+    Returns
+    -------
+    None
+    """
+    model_name = f"{experiment_name}_model"
+
+    # Регистрируем модель в модельном регистре
+    model_uri = f"runs:/{run_id}/model"
+    model_details = mlflow.register_model(model_uri=model_uri, name=model_name)
+
+    # Устанавливаем тег production для новой версии
+    from mlflow.tracking import MlflowClient
+    client = MlflowClient()
+
+    client.transition_model_version_stage(
+        name=model_name,
+        version=model_details.version,
+        stage="Production"
+    )
+
+    print(f"Модель {model_details.name} версии {model_details.version} зарегистрирована как Production")
+
+
 def main():
     """Main function to execute the PySpark job"""
     parser = argparse.ArgumentParser(description="Fraud Detection Model Training")
@@ -251,14 +374,17 @@ def main():
     parser.add_argument("--model-type", choices=["rf", "lr"], default="rf", help="Model type (rf: Random Forest, lr: Logistic Regression)")
     parser.add_argument("--tracking-uri", help="MLflow tracking URI")
     parser.add_argument("--experiment-name", default="fraud_detection", help="MLflow experiment name")
+    parser.add_argument("--auto-register", action="store_true", help="Automatically compare and register model if better")
     args = parser.parse_args()
 
     # Set MLflow tracking URI if provided
     if args.tracking_uri:
         mlflow.set_tracking_uri(args.tracking_uri)
+        print(f"Установлен MLflow tracking URI: {args.tracking_uri}")
 
     # Set or create MLflow experiment
     mlflow.set_experiment(args.experiment_name)
+    print(f"Используется эксперимент MLflow: {args.experiment_name}")
 
     # Create Spark session
     spark = create_spark_session()
@@ -275,6 +401,15 @@ def main():
 
         # Save model
         save_model(model, args.output)
+
+        # Автоматически сравниваем и регистрируем модель
+        if args.auto_register:
+            print("Сравниваем новую модель с предыдущей лучшей моделью...")
+            is_better = compare_and_register_model(metrics, args.experiment_name)
+            if is_better:
+                print("Новая модель зарегистрирована как Production.")
+            else:
+                print("Текущая Production модель осталась без изменений.")
 
         # Return success
         return 0
