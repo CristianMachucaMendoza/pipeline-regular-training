@@ -1,9 +1,9 @@
 variable "yc_instance_user" {
-  type = string  
+  type = string
 }
 
 variable "yc_instance_name" {
-  type = string  
+  type = string
 }
 
 variable "yc_network_name" {
@@ -56,4 +56,22 @@ variable "yc_config" {
 
 variable "airflow_db_conn_default" {
   type = string
+}
+
+# MLflow variables
+variable "yc_mlflow_instance_name" {
+  type = string
+  description = "Name of the MLflow server instance"
+}
+
+# PostgreSQL variables
+variable "yc_postgres_cluster_name" {
+  type = string
+  description = "Name of the PostgreSQL cluster"
+}
+
+variable "postgres_password" {
+  type = string
+  description = "Password for PostgreSQL database used by MLflow"
+  sensitive = true
 }

@@ -14,3 +14,10 @@ yc_storage_endpoint_url = "https://storage.yandexcloud.net"
 admin_password          = "Большая буква маленькие буквы цифры и знак -"
 public_key_path         = ""
 private_key_path        = ""
+
+# MLflow variables
+yc_mlflow_instance_name = "mlflow-server"
+
+# PostgreSQL variables
+yc_postgres_cluster_name = "postgres-cluster"
+postgres_password = "StrongPassword123!"
