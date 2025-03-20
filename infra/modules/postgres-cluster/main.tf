@@ -33,7 +33,7 @@ resource "yandex_mdb_postgresql_cluster" "postgres_cluster" {
   }
 
   host {
-    zone             = var.zone
+    zone             = var.provider_config.zone
     subnet_id        = var.subnet_id
     assign_public_ip = var.assign_public_ip
   }

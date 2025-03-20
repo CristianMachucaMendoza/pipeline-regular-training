@@ -36,7 +36,6 @@ module "postgres-cluster" {
   cluster_name       = var.yc_postgres_cluster_name
   network_id         = module.network.network_id
   security_group_id  = module.network.security_group_id
-  zone               = var.yc_config.zone
   subnet_id          = module.network.subnet_id
   postgres_password  = var.postgres_password
   provider_config    = var.yc_config
@@ -60,7 +59,6 @@ module "mlflow-server" {
   postgres_db        = module.postgres-cluster.postgres_db
   postgres_user      = module.postgres-cluster.postgres_user
   provider_config    = var.yc_config
-  depends_on         = [module.postgres-cluster]
 }
 
 resource "local_file" "variables_file" {

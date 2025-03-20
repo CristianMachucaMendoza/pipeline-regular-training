@@ -94,11 +94,6 @@ variable "disk_size" {
   default     = 20 # Минимальный размер
 }
 
-variable "zone" {
-  description = "Availability zone"
-  type        = string
-}
-
 variable "assign_public_ip" {
   description = "Assign public IP to PostgreSQL host"
   type        = bool
