@@ -69,7 +69,7 @@ resource "yandex_compute_instance" "mlflow_server" {
   provisioner "remote-exec" {
     inline = [
       "chmod +x /home/${var.instance_user}/setup_mlflow.sh",
-      "sudo /home/${var.instance_user}/setup_mlflow.sh"
+      "/home/${var.instance_user}/setup_mlflow.sh"
     ]
   }
 }

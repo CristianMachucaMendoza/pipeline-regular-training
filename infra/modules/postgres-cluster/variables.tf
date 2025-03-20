@@ -67,7 +67,7 @@ variable "security_group_id" {
 variable "deletion_protection" {
   description = "Protection from accidental deletion"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "postgres_version" {
