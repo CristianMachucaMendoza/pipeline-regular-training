@@ -10,7 +10,6 @@ path_to_venv="$path_to_user/venv"
 # Обновляем пакеты
 log "Обновление пакетов"
 sudo apt-get update
-sudo apt-get upgrade -y
 
 # Устанавливаем необходимые пакеты
 log "Установка необходимых пакетов"
