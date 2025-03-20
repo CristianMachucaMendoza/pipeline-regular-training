@@ -22,7 +22,7 @@ log "Setting up Python virtual environment"
 sudo -u mlflow bash -c "mkdir -p /home/mlflow/venv"
 sudo -u mlflow bash -c "python3 -m venv /home/mlflow/venv"
 sudo -u mlflow bash -c "/home/mlflow/venv/bin/pip install --upgrade pip"
-sudo -u mlflow bash -c "/home/mlflow/venv/bin/pip install mlflow psycopg2-binary boto3"
+sudo -u mlflow bash -c "/home/mlflow/venv/bin/pip install mlflow==2.21.0 psycopg-binary==3.2.6 boto3==1.37.16"
 
 # Копируем конфигурационный файл
 log "Copying configuration file"

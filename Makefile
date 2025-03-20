@@ -64,11 +64,11 @@ sync-repo:
 		--exclude=infra/.terraform \
 		--exclude=*.tfstate \
 		--exclude=*.backup \
-		--exclude=*.json . yc-proxy:/home/ubuntu/otus/otus-practice-reaular-retrain
+		--exclude=*.json . yc-proxy:/home/ubuntu/otus/otus-practice-regular-retrain
 
 .PHONY: sync-env
 sync-env:
-	rsync -avz yc-proxy:/home/ubuntu/otus/otus-practice-reaular-retrain/.env .env
+	rsync -avz yc-proxy:/home/ubuntu/otus/otus-practice-regular-retrain/.env .env
 
 .PHONY: airflow-cluster-mon
 airflow-cluster-mon:

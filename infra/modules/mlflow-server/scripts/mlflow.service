@@ -1,7 +1,6 @@
 [Unit]
 Description=MLflow Tracking Server
-After=network.target postgresql.service
-Wants=postgresql.service
+After=network.target
 
 [Service]
 User=mlflow
