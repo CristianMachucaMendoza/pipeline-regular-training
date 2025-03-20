@@ -8,14 +8,14 @@ resource "yandex_compute_instance" "mlflow_server" {
 
   resources {
     cores  = 2
-    memory = 4
+    memory = 8
     core_fraction = 20 # 20% vCPU
   }
 
   boot_disk {
     initialize_params {
       image_id = var.ubuntu_image_id
-      size     = 20 # GB
+      size     = 30 # GB
     }
   }
 

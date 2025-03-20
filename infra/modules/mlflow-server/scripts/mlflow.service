@@ -4,8 +4,8 @@ After=network.target
 
 [Service]
 WorkingDirectory=%h
-EnvironmentFile=%h/.mlflow.conf
-ExecStart=%h/mlflow_venv/bin/mlflow server \
+EnvironmentFile=/home/ubuntu/.mlflow.conf
+ExecStart=/home/ubuntu/venv/bin/mlflow server \
     --host=${MLFLOW_HOST} \
     --port=${MLFLOW_PORT} \
     --backend-store-uri=${MLFLOW_BACKEND_STORE_URI} \

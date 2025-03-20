@@ -20,30 +20,29 @@ log "Настройка виртуального окружения Python"
 mkdir -p $path_to_venv
 python3 -m venv $path_to_venv
 $path_to_venv/bin/pip install --upgrade pip
-$path_to_venv/bin/pip install mlflow==2.21.0 psycopg2-binary==3.2.6 boto3==1.37.16
+$path_to_venv/bin/pip install mlflow==2.21.0 psycopg2-binary==2.9.10 boto3==1.37.16
 
 # Загружаем сертификаты для подключения к PostgreSQL
 log "Загрузка сертификатов PostgreSQL"
-mkdir -p ~/.postgresql
+mkdir -p $path_to_user/.postgresql
 wget "https://storage.yandexcloud.net/cloud-certs/CA.pem" \
-    --output-document ~/.postgresql/root.crt
-chmod 0600 ~/.postgresql/root.crt
+    --output-document $path_to_user/.postgresql/root.crt
+chmod 0600 $path_to_user/.postgresql/root.crt
 
 # Копируем конфигурационный файл
 log "Копирование конфигурационного файла"
-cp $path_to_user/mlflow.conf ~/.mlflow.conf
-chmod 600 ~/.mlflow.conf
+cp $path_to_user/mlflow.conf $path_to_user/.mlflow.conf
+chmod 600 $path_to_user/.mlflow.conf
 
 # Копируем systemd сервис для запуска от имени пользователя
 log "Настройка пользовательского systemd сервиса"
-mkdir -p ~/.config/systemd/user/
-cp ~/mlflow.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable mlflow.service
-systemctl --user start mlflow.service
+sudo cp mlflow.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable mlflow.service
+sudo systemctl start mlflow.service
 
 # Настраиваем systemd для запуска сервисов пользователя при загрузке системы
 log "Настройка автозапуска пользовательских сервисов"
-sudo loginctl enable-linger $(whoami)
+sudo loginctl enable-linger ubuntu
 
 log "Установка MLflow завершена успешно" 

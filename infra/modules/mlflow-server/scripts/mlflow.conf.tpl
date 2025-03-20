@@ -10,5 +10,5 @@ AWS_SECRET_ACCESS_KEY=${s3_secret_key}
 MLFLOW_S3_ENDPOINT_URL=${s3_endpoint_url}
 
 # Postgresql сертификаты
-PGSSLROOTCERT=~/.postgresql/root.crt
+PGSSLROOTCERT=/home/ubuntu/.postgresql/root.crt
 PGSSLMODE=verify-full 
