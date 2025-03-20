@@ -159,7 +159,11 @@ with DAG(
             "--model-type", "rf",
             "--tracking-uri", MLFLOW_TRACKING_URI,
             "--experiment-name", MLFLOW_EXPERIMENT_NAME,
-            "--auto-register"  # Включаем автоматическую регистрацию лучшей модели
+            "--auto-register",  # Включаем автоматическую регистрацию лучшей модели
+            "--s3-endpoint-url", S3_ENDPOINT_URL,
+            "--s3-access-key", S3_ACCESS_KEY,
+            "--s3-secret-key", S3_SECRET_KEY,
+            "--run-name", f"fraud_detection_training_{datetime.now().strftime('%Y%m%d_%H%M')}"
         ],
     )
 

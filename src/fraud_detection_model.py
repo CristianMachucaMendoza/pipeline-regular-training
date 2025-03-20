@@ -16,26 +16,42 @@ from pyspark.ml.classification import RandomForestClassifier, LogisticRegression
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator
 from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
 
+# pylint: disable=broad-exception-caught
 
-def create_spark_session():
+def create_spark_session(s3_config=None):
     """
     Create and configure a Spark session.
+
+    Parameters
+    ----------
+    s3_config : dict, optional
+        Dictionary containing S3 configuration parameters
+        (endpoint_url, access_key, secret_key)
 
     Returns
     -------
     SparkSession
         Configured Spark session
     """
-    return (SparkSession
-            .builder
-            .appName("FraudDetectionModel")
+    # Создаем базовый Builder
+    builder = (SparkSession
+        .builder
+        .appName("FraudDetectionModel")
+    )
+
+    # Если передана конфигурация S3, добавляем настройки
+    if s3_config and all(k in s3_config for k in ['endpoint_url', 'access_key', 'secret_key']):
+        builder = (builder
             .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-            .config("spark.hadoop.fs.s3a.endpoint", os.environ.get("MLFLOW_S3_ENDPOINT_URL", "https://storage.yandexcloud.net"))
-            .config("spark.hadoop.fs.s3a.access.key", os.environ.get("AWS_ACCESS_KEY_ID"))
-            .config("spark.hadoop.fs.s3a.secret.key", os.environ.get("AWS_SECRET_ACCESS_KEY"))
+            .config("spark.hadoop.fs.s3a.endpoint", s3_config['endpoint_url'])
+            .config("spark.hadoop.fs.s3a.access.key", s3_config['access_key'])
+            .config("spark.hadoop.fs.s3a.secret.key", s3_config['secret_key'])
             .config("spark.hadoop.fs.s3a.path.style.access", "true")
             .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "true")
-            .getOrCreate())
+        )
+
+    # Создаем и возвращаем сессию Spark
+    return builder.getOrCreate()
 
 
 def load_data(spark, input_path):
@@ -55,7 +71,7 @@ def load_data(spark, input_path):
         (train_df, test_df) - Spark DataFrames for training and testing
     """
     # Load the data
-    df = spark.read.parquet(input_path)
+    df = spark.read.csv(input_path, header=True, inferSchema=True)
 
     # Print schema and basic statistics
     print("Dataset Schema:")
@@ -86,8 +102,8 @@ def prepare_features(train_df, test_df):
     tuple
         (train_df, test_df, feature_cols) - Prepared DataFrames and feature column names
     """
-    # Identify feature columns (all except the target column 'isFraud')
-    feature_cols = [col for col in train_df.columns if col != 'isFraud']
+    # Identify feature columns (all except the target column 'fraud')
+    feature_cols = [col for col in train_df.columns if col != 'fraud']
 
     return train_df, test_df, feature_cols
 
@@ -121,7 +137,7 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
     # Select model based on type
     if model_type == "rf":
         classifier = RandomForestClassifier(
-            labelCol="isFraud",
+            labelCol="fraud",
             featuresCol="features",
             numTrees=10,
             maxDepth=5
@@ -132,7 +148,7 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
             .build()
     else:  # Logistic Regression
         classifier = LogisticRegression(
-            labelCol="isFraud",
+            labelCol="fraud",
             featuresCol="features",
             maxIter=10
         )
@@ -146,17 +162,17 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
 
     # Create evaluators
     evaluator_auc = BinaryClassificationEvaluator(
-        labelCol="isFraud",
+        labelCol="fraud",
         rawPredictionCol="rawPrediction",
         metricName="areaUnderROC"
     )
     evaluator_acc = MulticlassClassificationEvaluator(
-        labelCol="isFraud",
+        labelCol="fraud",
         predictionCol="prediction",
         metricName="accuracy"
     )
     evaluator_f1 = MulticlassClassificationEvaluator(
-        labelCol="isFraud",
+        labelCol="fraud",
         predictionCol="prediction",
         metricName="f1"
     )
@@ -247,179 +263,242 @@ def save_model(model, output_path):
 
 def get_best_model_metrics(experiment_name):
     """
-    Получает метрики лучшей модели из MLflow
+    Получает метрики лучшей модели из MLflow с алиасом 'champion'
 
     Parameters
     ----------
     experiment_name : str
-        Название эксперимента в MLflow
+        Имя эксперимента MLflow
 
     Returns
     -------
     dict
-        Словарь с метриками лучшей модели или пустой словарь, если модели нет
+        Метрики лучшей модели или None, если модели нет
     """
-
     client = MlflowClient()
 
     # Получаем ID эксперимента
     experiment = client.get_experiment_by_name(experiment_name)
     if not experiment:
-        print(f"Эксперимент {experiment_name} не найден. Создаем новый.")
-        experiment_id = client.create_experiment(experiment_name)
-    else:
-        experiment_id = experiment.experiment_id
+        print(f"Эксперимент '{experiment_name}' не найден")
+        return None
 
-    # Получаем все запуски для эксперимента
-    runs = client.search_runs(
-        experiment_ids=[experiment_id],
-        filter_string="attributes.status = 'FINISHED'",
-        order_by=["metrics.auc DESC"]
-    )
+    try:
+        # Пытаемся получить модель по алиасу 'champion'
+        model_name = f"{experiment_name}_model"
 
-    if not runs:
-        print("Нет завершенных запусков для эксперимента.")
-        return {}
+        # Проверяем, существует ли зарегистрированная модель
+        try:
+            registered_model = client.get_registered_model(model_name)
+            print(f"Модель '{model_name}' зарегистрирована")
+            print(f"Модель '{model_name}' имеет {len(registered_model.latest_versions)} версий")
+        except Exception:
+            print(f"Модель '{model_name}' еще не зарегистрирована")
+            return None
 
-    # Получаем лучший запуск по метрике AUC
-    best_run = runs[0]
-    best_metrics = {
-        "run_id": best_run.info.run_id,
-        "auc": best_run.data.metrics.get("auc", 0),
-        "accuracy": best_run.data.metrics.get("accuracy", 0),
-        "f1": best_run.data.metrics.get("f1", 0)
-    }
+        # Получаем версии модели и проверяем наличие алиаса 'champion'
+        model_versions = client.get_latest_versions(model_name)
+        champion_version = None
 
-    print(f"Лучшая существующая модель: {best_metrics}")
-    return best_metrics
+        for version in model_versions:
+            # Проверяем наличие атрибута 'aliases' или используем тег
+            if hasattr(version, 'aliases') and "champion" in version.aliases:
+                champion_version = version
+                break
+            elif hasattr(version, 'tags') and version.tags.get('alias') == "champion":
+                champion_version = version
+                break
+
+        if not champion_version:
+            print("Модель с алиасом 'champion' не найдена")
+            return None
+
+        # Получаем Run ID чемпиона
+        champion_run_id = champion_version.run_id
+
+        # Получаем метрики из прогона
+        run = client.get_run(champion_run_id)
+        metrics = {
+            "run_id": champion_run_id,
+            "auc": run.data.metrics["auc"],
+            "accuracy": run.data.metrics["accuracy"],
+            "f1": run.data.metrics["f1"]
+        }
+
+        print(f"Текущая лучшая модель (champion): версия {champion_version.version}, Run ID: {champion_run_id}")
+        print(f"Метрики: AUC={metrics['auc']:.4f}, Accuracy={metrics['accuracy']:.4f}, F1={metrics['f1']:.4f}")
+
+        return metrics
+    except Exception as e:
+        print(f"Ошибка при получении лучшей модели: {str(e)}")
+        return None
 
 
 def compare_and_register_model(new_metrics, experiment_name):
     """
-    Сравнивает метрики новой модели с лучшей моделью
-    и регистрирует новую модель если она лучше
+    Сравнивает новую модель с лучшей в MLflow и регистрирует, если она лучше
 
     Parameters
     ----------
     new_metrics : dict
         Метрики новой модели
     experiment_name : str
-        Название эксперимента в MLflow
+        Имя эксперимента MLflow
 
     Returns
     -------
     bool
-        True если новая модель лучше, False если нет
+        True, если новая модель была зарегистрирована как лучшая
     """
-    # Получаем метрики лучшей модели
-    best_model_metrics = get_best_model_metrics(experiment_name)
-
-    # Если нет лучшей модели, считаем новую лучшей
-    if not best_model_metrics:
-        print("Нет предыдущей модели. Регистрируем новую модель как лучшую.")
-        register_model_as_production(new_metrics["run_id"], experiment_name)
-        return True
-
-    # Сравниваем метрики
-    print(f"Сравниваем метрики: текущая лучшая модель AUC={best_model_metrics['auc']}, новая модель AUC={new_metrics['auc']}")
-
-    if new_metrics["auc"] > best_model_metrics["auc"]:
-        print("Новая модель лучше. Регистрируем новую модель.")
-        register_model_as_production(new_metrics["run_id"], experiment_name)
-        return True
-    else:
-        print("Текущая модель лучше. Оставляем текущую модель.")
-        return False
-
-
-def register_model_as_production(run_id, experiment_name):
-    """
-    Регистрирует модель из указанного запуска как production
-
-    Parameters
-    ----------
-    run_id : str
-        ID запуска в MLflow
-    experiment_name : str
-        Название эксперимента в MLflow
-
-    Returns
-    -------
-    None
-    """
-    model_name = f"{experiment_name}_model"
-
-    # Регистрируем модель в модельном регистре
-    model_uri = f"runs:/{run_id}/model"
-    model_details = mlflow.register_model(model_uri=model_uri, name=model_name)
-
-    # Устанавливаем тег production для новой версии
-    from mlflow.tracking import MlflowClient
     client = MlflowClient()
 
-    client.transition_model_version_stage(
-        name=model_name,
-        version=model_details.version,
-        stage="Production"
-    )
+    # Получаем метрики лучшей модели
+    best_metrics = get_best_model_metrics(experiment_name)
 
-    print(f"Модель {model_details.name} версии {model_details.version} зарегистрирована как Production")
+    # Имя модели
+    model_name = f"{experiment_name}_model"
+
+    # Создаем или получаем регистрированную модель
+    try:
+        client.get_registered_model(model_name)
+        print(f"Модель '{model_name}' уже зарегистрирована")
+    except Exception:
+        client.create_registered_model(model_name)
+        print(f"Создана новая регистрированная модель '{model_name}'")
+
+    # Регистрируем новую модель как новую версию
+    run_id = new_metrics["run_id"]
+    model_uri = f"runs:/{run_id}/model"
+    model_details = mlflow.register_model(model_uri, model_name)
+    new_version = model_details.version
+
+    # Решаем, должна ли новая модель стать 'champion'
+    should_promote = False
+
+    if not best_metrics:
+        should_promote = True
+        print("Это первая регистрируемая модель, она будет назначена как 'champion'")
+    else:
+        # Сравниваем на основе AUC (можно изменить критерий сравнения)
+        if new_metrics["auc"] > best_metrics["auc"]:
+            should_promote = True
+            improvement = (new_metrics["auc"] - best_metrics["auc"]) / best_metrics["auc"] * 100
+            print(f"Новая модель лучше на {improvement:.2f}% по AUC. Установка в качестве 'champion'")
+        else:
+            print(
+                f"Новая модель не превосходит текущую 'champion' модель по AUC. "
+                f"Текущий AUC: {best_metrics['auc']:.4f}, новый AUC: {new_metrics['auc']:.4f}"
+            )
+
+    # Если новая модель лучше, устанавливаем ее как 'champion'
+    if should_promote:
+        # Устанавливаем алиас 'champion' для новой версии
+        try:
+            # Проверяем доступность метода set_registered_model_alias
+            if hasattr(client, 'set_registered_model_alias'):
+                client.set_registered_model_alias(model_name, "champion", new_version)
+            else:
+                # Для старых версий MLflow используем тег
+                client.set_model_version_tag(model_name, new_version, "alias", "champion")
+        except Exception as e:
+            print(f"Ошибка установки алиаса 'champion': {str(e)}")
+            # Продолжаем выполнение и используем тег как запасной вариант
+            client.set_model_version_tag(model_name, new_version, "alias", "champion")
+
+        print(f"Версия {new_version} модели '{model_name}' установлена как 'champion'")
+        return True
+
+    # Если модель не лучше, устанавливаем алиас 'challenger'
+    try:
+        # Проверяем доступность метода set_registered_model_alias
+        if hasattr(client, 'set_registered_model_alias'):
+            client.set_registered_model_alias(model_name, "challenger", new_version)
+        else:
+            # Для старых версий MLflow используем тег
+            client.set_model_version_tag(model_name, new_version, "alias", "challenger")
+    except Exception as e:
+        print(f"Ошибка установки алиаса 'challenger': {str(e)}")
+        # Продолжаем выполнение и используем тег как запасной вариант
+        client.set_model_version_tag(model_name, new_version, "alias", "challenger")
+
+    print(f"Версия {new_version} модели '{model_name}' установлена как 'challenger'")
+    return False
 
 
 def main():
-    """Main function to execute the PySpark job"""
+    """
+    Main function to run the fraud detection model training.
+    """
     parser = argparse.ArgumentParser(description="Fraud Detection Model Training")
-    parser.add_argument("--input", required=True, help="Input data path (parquet format)")
+    # Основные параметры
+    parser.add_argument("--input", required=True, help="Input data path")
     parser.add_argument("--output", required=True, help="Output model path")
     parser.add_argument("--model-type", choices=["rf", "lr"], default="rf", help="Model type (rf: Random Forest, lr: Logistic Regression)")
+
+    # MLflow параметры
     parser.add_argument("--tracking-uri", help="MLflow tracking URI")
     parser.add_argument("--experiment-name", default="fraud_detection", help="MLflow experiment name")
-    parser.add_argument("--auto-register", action="store_true", help="Automatically compare and register model if better")
+    parser.add_argument("--auto-register", action="store_true", help="Automatically register better models")
+    parser.add_argument("--run-name", default=None, help="Name for the MLflow run")
+
+    # S3 параметры
+    parser.add_argument("--s3-endpoint-url", help="S3 endpoint URL")
+    parser.add_argument("--s3-access-key", help="S3 access key")
+    parser.add_argument("--s3-secret-key", help="S3 secret key")
+
     args = parser.parse_args()
+
+    # Настраиваем S3 конфигурацию
+    s3_config = None
+    if args.s3_endpoint_url and args.s3_access_key and args.s3_secret_key:
+        s3_config = {
+            'endpoint_url': args.s3_endpoint_url,
+            'access_key': args.s3_access_key,
+            'secret_key': args.s3_secret_key
+        }
+        # Устанавливаем переменные окружения для MLflow
+        os.environ['AWS_ACCESS_KEY_ID'] = args.s3_access_key
+        os.environ['AWS_SECRET_ACCESS_KEY'] = args.s3_secret_key
+        os.environ['MLFLOW_S3_ENDPOINT_URL'] = args.s3_endpoint_url
 
     # Set MLflow tracking URI if provided
     if args.tracking_uri:
         mlflow.set_tracking_uri(args.tracking_uri)
-        print(f"Установлен MLflow tracking URI: {args.tracking_uri}")
 
-    # Set or create MLflow experiment
+    # Create or set the experiment
     mlflow.set_experiment(args.experiment_name)
-    print(f"Используется эксперимент MLflow: {args.experiment_name}")
 
     # Create Spark session
-    spark = create_spark_session()
+    spark = create_spark_session(s3_config)
 
     try:
         # Load and prepare data
         train_df, test_df = load_data(spark, args.input)
-
-        # Prepare features
         train_df, test_df, feature_cols = prepare_features(train_df, test_df)
 
-        # Train model
-        model, metrics = train_model(train_df, test_df, feature_cols, args.model_type)
+        # Generate run name if not provided
+        run_name = args.run_name or f"fraud_detection_{args.model_type}_{os.path.basename(args.input)}"
 
-        # Save model
+        # Train the model
+        model, metrics = train_model(train_df, test_df, feature_cols, args.model_type, run_name)
+
+        # Save the model locally
         save_model(model, args.output)
 
-        # Автоматически сравниваем и регистрируем модель
+        # Register model if requested
         if args.auto_register:
-            print("Сравниваем новую модель с предыдущей лучшей моделью...")
-            is_better = compare_and_register_model(metrics, args.experiment_name)
-            if is_better:
-                print("Новая модель зарегистрирована как Production.")
-            else:
-                print("Текущая Production модель осталась без изменений.")
+            print("Comparing and registering model...")
+            compare_and_register_model(metrics, args.experiment_name)
 
-        # Return success
-        return 0
+        print("Training completed successfully!")
+
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return 1
+        print(f"Error during training: {str(e)}")
+        sys.exit(1)
     finally:
         # Stop Spark session
         spark.stop()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
