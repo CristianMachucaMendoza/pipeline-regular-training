@@ -132,7 +132,12 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
     """
     # Create feature vector
     assembler = VectorAssembler(inputCols=feature_cols, outputCol="features_raw")
-    scaler = StandardScaler(inputCol="features_raw", outputCol="features", withStd=True, withMean=True)
+    scaler = StandardScaler(
+        inputCol="features_raw",
+        outputCol="features",
+        withStd=True,
+        withMean=True
+    )
 
     # Select model based on type
     if model_type == "rf":
@@ -325,8 +330,15 @@ def get_best_model_metrics(experiment_name):
             "f1": run.data.metrics["f1"]
         }
 
-        print(f"Текущая лучшая модель (champion): версия {champion_version.version}, Run ID: {champion_run_id}")
-        print(f"Метрики: AUC={metrics['auc']:.4f}, Accuracy={metrics['accuracy']:.4f}, F1={metrics['f1']:.4f}")
+        print(
+            f"Текущая лучшая модель (champion): "
+            f"версия {champion_version.version}, Run ID: {champion_run_id}"
+        )
+        print(
+            f"Метрики: AUC={metrics['auc']:.4f}, "
+            f"Accuracy={metrics['accuracy']:.4f}, "
+            f"F1={metrics['f1']:.4f}"
+        )
 
         return metrics
     except Exception as e:
@@ -383,7 +395,9 @@ def compare_and_register_model(new_metrics, experiment_name):
         if new_metrics["auc"] > best_metrics["auc"]:
             should_promote = True
             improvement = (new_metrics["auc"] - best_metrics["auc"]) / best_metrics["auc"] * 100
-            print(f"Новая модель лучше на {improvement:.2f}% по AUC. Установка в качестве 'champion'")
+            print(
+                f"Новая модель лучше на {improvement:.2f}% по AUC. Установка в качестве 'champion'"
+            )
         else:
             print(
                 f"Новая модель не превосходит текущую 'champion' модель по AUC. "
@@ -433,12 +447,12 @@ def main():
     # Основные параметры
     parser.add_argument("--input", required=True, help="Input data path")
     parser.add_argument("--output", required=True, help="Output model path")
-    parser.add_argument("--model-type", choices=["rf", "lr"], default="rf", help="Model type (rf: Random Forest, lr: Logistic Regression)")
+    parser.add_argument("--model-type", choices=["rf", "lr"], default="rf", help="Model type")
 
     # MLflow параметры
     parser.add_argument("--tracking-uri", help="MLflow tracking URI")
-    parser.add_argument("--experiment-name", default="fraud_detection", help="MLflow experiment name")
-    parser.add_argument("--auto-register", action="store_true", help="Automatically register better models")
+    parser.add_argument("--experiment-name", default="fraud_detection", help="MLflow exp name")
+    parser.add_argument("--auto-register", action="store_true", help="Automatically register")
     parser.add_argument("--run-name", default=None, help="Name for the MLflow run")
 
     # S3 параметры
