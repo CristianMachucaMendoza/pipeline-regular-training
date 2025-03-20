@@ -57,6 +57,7 @@ git-push-secrets:
 	@echo "Pushing secrets to github..."
 	python3 utils/push_secrets_to_github_repo.py
 
+.PHONY: sync-repo
 sync-repo:
 	rsync -avz \
 		--exclude=.venv \
@@ -65,8 +66,30 @@ sync-repo:
 		--exclude=*.backup \
 		--exclude=*.json . yc-proxy:/home/ubuntu/otus/otus-practice-reaular-retrain
 
+.PHONY: sync-env
 sync-env:
 	rsync -avz yc-proxy:/home/ubuntu/otus/otus-practice-reaular-retrain/.env .env
 
+.PHONY: airflow-cluster-mon
 airflow-cluster-mon:
 	yc logging read --group-name=default --follow
+
+.PHONY: create-venv-archive
+create-venv-archive:
+	@echo "Creating .venv archive..."
+	mkdir -p venvs
+	chmod +x scripts/create_venv_archive.sh
+	./scripts/create_venv_archive.sh
+	@echo "Archive created successfully"
+
+.PHONY: upload-venv-to-bucket
+upload-venv-to-bucket: create-venv-archive
+	@echo "Uploading virtual environment archive to $(S3_BUCKET_NAME)..."
+	s3cmd put venvs/fraud_detection_venv.tar.gz s3://$(S3_BUCKET_NAME)/venvs/fraud_detection_venv.tar.gz
+	@echo "Virtual environment archive uploaded successfully"
+
+.PHONY: deploy-full
+deploy-full: create-venv-archive upload-venv-to-bucket upload-src-to-bucket upload-dags-to-bucket upload-data-to-bucket
+	@echo "Full deployment completed successfully"
+	@echo "Virtual environment, source code, DAGs, and data have been uploaded to S3"
+	@echo "You can now run the pipeline in Airflow"

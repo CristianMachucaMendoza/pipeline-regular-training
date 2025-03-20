@@ -31,6 +31,7 @@ S3_INPUT_DATA_BUCKET = f"s3a://{S3_BUCKET_NAME}/fraud_data/"  # Путь к да
 S3_OUTPUT_MODEL_BUCKET = f"s3a://{S3_BUCKET_NAME}/models/"    # Путь для сохранения моделей
 S3_SRC_BUCKET = f"s3a://{S3_BUCKET_NAME}/src/"               # Путь к исходному коду
 S3_DP_LOGS_BUCKET = f"s3a://{S3_BUCKET_NAME}/airflow_logs/"  # Путь для логов Data Proc
+S3_VENV_ARCHIVE = f"s3a://{S3_BUCKET_NAME}/venvs/fraud_detection_venv.tar.gz"
 
 # Переменные необходимые для создания Dataproc кластера
 DP_SA_AUTH_KEY_PUBLIC_KEY = Variable.get("DP_SA_AUTH_KEY_PUBLIC_KEY")
@@ -165,6 +166,13 @@ with DAG(
             "--s3-secret-key", S3_SECRET_KEY,
             "--run-name", f"fraud_detection_training_{datetime.now().strftime('%Y%m%d_%H%M')}"
         ],
+        properties={
+            'spark.submit.deployMode': 'cluster',
+            'spark.yarn.dist.archives': f'{S3_VENV_ARCHIVE}#.venv',
+            'spark.yarn.appMasterEnv.PYSPARK_PYTHON': './.venv/bin/python',
+            'spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON': './.venv/bin/python',
+            'spark.executorEnv.PYSPARK_PYTHON': './.venv/bin/python'
+        }
     )
 
     # Удаление Dataproc кластера
