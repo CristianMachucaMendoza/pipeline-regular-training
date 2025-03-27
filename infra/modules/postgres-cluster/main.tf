@@ -48,7 +48,7 @@ resource "yandex_mdb_postgresql_cluster" "postgres_cluster" {
 resource "yandex_mdb_postgresql_database" "mlflow_db" {
   cluster_id = yandex_mdb_postgresql_cluster.postgres_cluster.id
   name       = var.postgres_db
-  owner      = "postgres"  # Используем стандартного пользователя postgres как начального владельца
+  owner      = yandex_mdb_postgresql_user.mlflow_user.name
 }
 
 resource "yandex_mdb_postgresql_user" "mlflow_user" {
@@ -56,18 +56,11 @@ resource "yandex_mdb_postgresql_user" "mlflow_user" {
   name       = var.postgres_user
   password   = var.postgres_password
 
-  permission {
-    database_name = var.postgres_db
-  }
-
   settings = {
     default_transaction_isolation = "read committed"
     log_min_duration_statement    = 5000
   }
 
-  depends_on = [
-    yandex_mdb_postgresql_database.mlflow_db
-  ]
 }
 
 # Обновляем .env файл с данными подключения к PostgreSQL
