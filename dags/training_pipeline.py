@@ -179,12 +179,12 @@ with DAG(
         #     "--s3-secret-key", S3_SECRET_KEY,
         #     "--run-name", f"training_{datetime.now().strftime('%Y%m%d_%H%M')}"
         # ],
-        # properties={
-        #     'spark.submit.deployMode': 'cluster',
-        #     'spark.yarn.dist.archives': f'{S3_VENV_ARCHIVE}#.venv',
-        #     'spark.yarn.appMasterEnv.PYSPARK_PYTHON': './.venv/bin/python3',
-        #     'spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON': './.venv/bin/python3',
-        # },
+        properties={
+            'spark.submit.deployMode': 'cluster',
+            'spark.yarn.dist.archives': f'{S3_VENV_ARCHIVE}#.venv',
+            'spark.yarn.appMasterEnv.PYSPARK_PYTHON': './.venv/bin/python3',
+            'spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON': './.venv/bin/python3',
+        },
     )
 
     # Удаление Dataproc кластера

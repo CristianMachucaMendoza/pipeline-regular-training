@@ -47,13 +47,38 @@ if [ ! -f "$REQUIREMENTS_FILE" ]; then
     fi
 fi
 
-# Создаем новое виртуальное окружение с копированием файлов (не символическими ссылками)
-echo "Создаем новое самодостаточное виртуальное окружение в ${TEMP_VENV_DIR}..."
-virtualenv --always-copy "$TEMP_VENV_DIR"
+# Проверяем наличие временного виртуального окружения
+if [ -d "$TEMP_VENV_DIR" ] && [ -f "${TEMP_VENV_DIR}/bin/python" ]; then
+    echo "Найдено существующее временное виртуальное окружение в ${TEMP_VENV_DIR}"
+    echo "Используем существующее окружение..."
+    
+    # Проверяем, установлены ли все зависимости
+    REQUIREMENTS_INSTALLED=true
+    while IFS= read -r package; do
+        if [ -n "$package" ] && [[ ! "$package" == \#* ]]; then
+            package_name=$(echo "$package" | cut -d'=' -f1)
+            if ! "${TEMP_VENV_DIR}/bin/pip" list | grep -q "$package_name"; then
+                REQUIREMENTS_INSTALLED=false
+                break
+            fi
+        fi
+    done < "$REQUIREMENTS_FILE"
+    
+    if [ "$REQUIREMENTS_INSTALLED" = false ]; then
+        echo "Не все зависимости установлены, устанавливаем недостающие пакеты..."
+        "${TEMP_VENV_DIR}/bin/pip" install -r "$REQUIREMENTS_FILE"
+    else
+        echo "Все зависимости уже установлены."
+    fi
+else
+    # Создаем новое виртуальное окружение с копированием файлов (не символическими ссылками)
+    echo "Создаем новое самодостаточное виртуальное окружение в ${TEMP_VENV_DIR}..."
+    virtualenv --always-copy "$TEMP_VENV_DIR"
 
-# Устанавливаем зависимости в новое окружение
-echo "Устанавливаем зависимости из requirements.txt..."
-"${TEMP_VENV_DIR}/bin/pip" install -r "$REQUIREMENTS_FILE"
+    # Устанавливаем зависимости в новое окружение
+    echo "Устанавливаем зависимости из requirements.txt..."
+    "${TEMP_VENV_DIR}/bin/pip" install -r "$REQUIREMENTS_FILE"
+fi
 
 # Проверяем, что интерпретатор Python действительно является файлом, а не символической ссылкой
 PYTHON_BIN="${TEMP_VENV_DIR}/bin/python"
@@ -66,16 +91,31 @@ fi
 # Создаем архив, исключая ненужные файлы для уменьшения размера
 echo "Создаем архив из подготовленного виртуального окружения ${TEMP_VENV_DIR}..."
 
-cd "${TEMP_VENV_DIR}"
+# Создаем временную структуру с нужным именем директории
+TEMP_DIR="${PROJECT_ROOT}/temp_for_archive"
+mkdir -p "$TEMP_DIR"
+echo "Копируем виртуальное окружение в промежуточную структуру..."
+
+# Копируем содержимое временного окружения в папку .venv внутри временной директории
+mkdir -p "${TEMP_DIR}/.venv"
+cp -a "${TEMP_VENV_DIR}/." "${TEMP_DIR}/.venv/"
+
+# Создаем архив из правильно структурированной временной директории
+cd "${TEMP_DIR}"
 tar --exclude='*.pyc' \
     --exclude='__pycache__' \
     --exclude='*.dist-info' \
     --exclude='*.egg-info' \
     --exclude='pip-selfcheck.json' \
-    -czf "${ARCHIVE_PATH}" .
+    -czf "${ARCHIVE_PATH}" \
+    .venv
+
+# Удаляем временную директорию
+cd "${PROJECT_ROOT}"
+rm -rf "${TEMP_DIR}"
 
 echo "Проверяем содержимое архива..."
-tar -tvf "${ARCHIVE_PATH}" | grep "bin/python"
+tar -tvf "${ARCHIVE_PATH}" | grep ".venv/bin/python"
 
 echo "Архив создан: ${ARCHIVE_PATH}"
 echo "Размер архива: $(du -h "${ARCHIVE_PATH}" | cut -f1)"
