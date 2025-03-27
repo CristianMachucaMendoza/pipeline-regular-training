@@ -23,3 +23,7 @@ config
 history.txt
 buf
 venvs
+!data/.gitkeep
+data/*.csv
+.temp_venv
+.cursor

@@ -74,6 +74,10 @@ sync-env:
 airflow-cluster-mon:
 	yc logging read --group-name=default --follow
 
+.PHONY: create-data
+create-data:
+	python3 scripts/create_demo_data.py
+
 .PHONY: create-venv-archive
 create-venv-archive:
 	@echo "Creating .venv archive..."
@@ -83,9 +87,9 @@ create-venv-archive:
 	@echo "Archive created successfully"
 
 .PHONY: upload-venv-to-bucket
-upload-venv-to-bucket: create-venv-archive
+upload-venv-to-bucket:
 	@echo "Uploading virtual environment archive to $(S3_BUCKET_NAME)..."
-	s3cmd put venvs/fraud_detection_venv.tar.gz s3://$(S3_BUCKET_NAME)/venvs/fraud_detection_venv.tar.gz
+	s3cmd put venvs/venv.tar.gz s3://$(S3_BUCKET_NAME)/venvs/venv.tar.gz
 	@echo "Virtual environment archive uploaded successfully"
 
 .PHONY: deploy-full
@@ -93,15 +97,3 @@ deploy-full: create-venv-archive upload-venv-to-bucket upload-src-to-bucket uplo
 	@echo "Full deployment completed successfully"
 	@echo "Virtual environment, source code, DAGs, and data have been uploaded to S3"
 	@echo "You can now run the pipeline in Airflow"
-
-.PHONY: test-pg-connection
-test-pg-connection:
-	@echo "Проверка соединения с PostgreSQL..."
-	./scripts/test_pg_connection.py \
-		--host $(POSTGRES_HOST) \
-		--port $(POSTGRES_PORT) \
-		--dbname $(POSTGRES_DB) \
-		--user $(POSTGRES_USER) \
-		--password $(POSTGRES_PASSWORD) \
-		--sslmode verify-full
-	@echo "Проверка соединения завершена"

@@ -27,11 +27,11 @@ S3_ENDPOINT_URL = Variable.get("S3_ENDPOINT_URL")
 S3_ACCESS_KEY = Variable.get("S3_ACCESS_KEY")
 S3_SECRET_KEY = Variable.get("S3_SECRET_KEY")
 S3_BUCKET_NAME = Variable.get("S3_BUCKET_NAME")
-S3_INPUT_DATA_BUCKET = f"s3a://{S3_BUCKET_NAME}/fraud_data/"  # Путь к данным
+S3_INPUT_DATA_BUCKET = f"s3a://{S3_BUCKET_NAME}/data/"  # Путь к данным
 S3_OUTPUT_MODEL_BUCKET = f"s3a://{S3_BUCKET_NAME}/models/"    # Путь для сохранения моделей
-S3_SRC_BUCKET = f"s3a://{S3_BUCKET_NAME}/src/"               # Путь к исходному коду
+S3_SRC_BUCKET = f"s3a://{S3_BUCKET_NAME}/src"               # Путь к исходному коду
 S3_DP_LOGS_BUCKET = f"s3a://{S3_BUCKET_NAME}/airflow_logs/"  # Путь для логов Data Proc
-S3_VENV_ARCHIVE = f"s3a://{S3_BUCKET_NAME}/venvs/fraud_detection_venv.tar.gz"
+S3_VENV_ARCHIVE = f"s3a://{S3_BUCKET_NAME}/venvs/venv.tar.gz"
 
 # Переменные необходимые для создания Dataproc кластера
 DP_SA_AUTH_KEY_PUBLIC_KEY = Variable.get("DP_SA_AUTH_KEY_PUBLIC_KEY")
@@ -65,6 +65,9 @@ YC_SA_CONNECTION = Connection(
 )
 
 # Проверка наличия подключений в Airflow
+# Если подключения отсутствуют, то они добавляются
+# и сохраняются в базе данных Airflow
+# Подключения используются для доступа к Object Storage и Dataproc
 def setup_airflow_connections(*connections: Connection) -> None:
     """
     Check and add missing connections to Airflow.
@@ -111,13 +114,13 @@ default_args = {
 }
 
 with DAG(
-    dag_id="fraud_detection_training",
+    dag_id="training_pipeline",
     default_args=default_args,
     description="Periodic training of fraud detection model",
-    schedule_interval=timedelta(minutes=30),  # Запуск каждые 30 минут
-    start_date=datetime(2025, 3, 19),
+    schedule_interval=timedelta(minutes=60),  # Запуск каждые 60 минут
+    start_date=datetime(2025, 3, 27),
     catchup=False,
-    tags=['mlops', 'fraud_detection'],
+    tags=['mlops', ],
 ) as dag:
     # Задача для создания подключений
     setup_connections = PythonOperator(
@@ -126,61 +129,71 @@ with DAG(
     )
 
     # Создание Dataproc кластера
-    create_cluster = DataprocCreateClusterOperator(
-        task_id="create_dataproc_cluster",
+    create_spark_cluster = DataprocCreateClusterOperator(
+        task_id="spark-cluster-create-task",
         folder_id=YC_FOLDER_ID,
-        cluster_name=f"fraud-detection-{uuid.uuid4()}",
-        cluster_description="Temporary cluster for fraud detection model training",
+        cluster_name=f"tmp-dp-training-{uuid.uuid4()}",
+        cluster_description="YC Temporary cluster for model training",
         subnet_id=YC_SUBNET_ID,
         s3_bucket=S3_DP_LOGS_BUCKET,
         service_account_id=DP_SA_ID,
         ssh_public_keys=YC_SSH_PUBLIC_KEY,
         zone=YC_ZONE,
         cluster_image_version="2.0",
+
+        # masternode
         masternode_resource_preset="s3-c2-m8",
         masternode_disk_type="network-ssd",
-        masternode_disk_size=20,
+        masternode_disk_size=50,
+
+        # datanodes
         datanode_resource_preset="s3-c4-m16",
         datanode_disk_type="network-ssd",
         datanode_disk_size=50,
-        datanode_count=2,
+        datanode_count=1,
+
+        # computenodes
         computenode_count=0,
+
+        # software
         services=["YARN", "SPARK", "HDFS", "MAPREDUCE"],
         connection_id=YC_SA_CONNECTION.conn_id,
+        dag=dag,
     )
 
     # Запуск PySpark задания для обучения модели
     train_model = DataprocCreatePysparkJobOperator(
-        task_id="train_fraud_detection_model",
-        main_python_file_uri=f"{S3_SRC_BUCKET}fraud_detection_model.py",
+        task_id="train",
+        main_python_file_uri=f"{S3_SRC_BUCKET}/test.py",
         connection_id=YC_SA_CONNECTION.conn_id,
-        args=[
-            "--input", f"{S3_INPUT_DATA_BUCKET}",
-            "--output", f"{S3_OUTPUT_MODEL_BUCKET}fraud_model_{datetime.now().strftime('%Y%m%d')}",
-            "--model-type", "rf",
-            "--tracking-uri", MLFLOW_TRACKING_URI,
-            "--experiment-name", MLFLOW_EXPERIMENT_NAME,
-            "--auto-register",  # Включаем автоматическую регистрацию лучшей модели
-            "--s3-endpoint-url", S3_ENDPOINT_URL,
-            "--s3-access-key", S3_ACCESS_KEY,
-            "--s3-secret-key", S3_SECRET_KEY,
-            "--run-name", f"fraud_detection_training_{datetime.now().strftime('%Y%m%d_%H%M')}"
-        ],
-        properties={
-            'spark.submit.deployMode': 'cluster',
-            'spark.yarn.dist.archives': f'{S3_VENV_ARCHIVE}#.venv',
-            'spark.yarn.appMasterEnv.PYSPARK_PYTHON': './.venv/bin/python',
-            'spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON': './.venv/bin/python',
-            'spark.executorEnv.PYSPARK_PYTHON': './.venv/bin/python'
-        }
+        dag=dag,
+        # args=[
+        #     "--input", f"{S3_INPUT_DATA_BUCKET}train.csv",
+        #     "--output", f"{S3_OUTPUT_MODEL_BUCKET}model_{datetime.now().strftime('%Y%m%d')}",
+        #     "--model-type", "rf",
+        #     "--tracking-uri", MLFLOW_TRACKING_URI,
+        #     "--experiment-name", MLFLOW_EXPERIMENT_NAME,
+        #     "--auto-register",  # Включаем автоматическую регистрацию лучшей модели
+        #     "--s3-endpoint-url", S3_ENDPOINT_URL,
+        #     "--s3-access-key", S3_ACCESS_KEY,
+        #     "--s3-secret-key", S3_SECRET_KEY,
+        #     "--run-name", f"training_{datetime.now().strftime('%Y%m%d_%H%M')}"
+        # ],
+        # properties={
+        #     'spark.submit.deployMode': 'cluster',
+        #     'spark.yarn.dist.archives': f'{S3_VENV_ARCHIVE}#.venv',
+        #     'spark.yarn.appMasterEnv.PYSPARK_PYTHON': './.venv/bin/python3',
+        #     'spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON': './.venv/bin/python3',
+        # },
     )
 
     # Удаление Dataproc кластера
-    delete_cluster = DataprocDeleteClusterOperator(
-        task_id="delete_dataproc_cluster",
+    delete_spark_cluster = DataprocDeleteClusterOperator(
+        task_id="spark-cluster-delete-task",
         trigger_rule=TriggerRule.ALL_DONE,
+        dag=dag,
     )
 
     # Определение последовательности выполнения задач
     # pylint: disable=pointless-statement
-    setup_connections >> create_cluster >> train_model >> delete_cluster
+    setup_connections >> create_spark_cluster >> train_model >> delete_spark_cluster
