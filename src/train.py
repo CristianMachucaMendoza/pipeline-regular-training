@@ -270,8 +270,8 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
             # Получаем параметры модели как свойства, а не методы
             print("DEBUG: Получаем numTrees и maxDepth как свойства")
             try:
-                num_trees = rf_model.getNumTrees  # Это свойство, а не метод
-                max_depth = rf_model.getMaxDepth  # Это тоже свойство, без ()
+                num_trees = rf_model.getNumTrees
+                max_depth = rf_model.getMaxDepth()
                 print(f"DEBUG: numTrees={num_trees}, maxDepth={max_depth}")
                 mlflow.log_param("best_numTrees", num_trees)
                 mlflow.log_param("best_maxDepth", max_depth)
