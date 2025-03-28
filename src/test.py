@@ -21,3 +21,4 @@ if __name__ == "__main__":
 
     # Always stop the spark session when done
     spark.stop()
+
