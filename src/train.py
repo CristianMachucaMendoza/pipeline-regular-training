@@ -267,8 +267,21 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
             # Log best model parameters
             print("DEBUG: Получаем и логируем параметры лучшей модели")
             rf_model = best_model.stages[-1]
-            mlflow.log_param("best_numTrees", rf_model.getNumTrees())  # Исправлено: добавлены скобки для вызова метода
-            mlflow.log_param("best_maxDepth", rf_model.getMaxDepth())
+            # Получаем параметры модели как свойства, а не методы
+            print("DEBUG: Получаем numTrees и maxDepth как свойства")
+            try:
+                num_trees = rf_model.getNumTrees  # Это свойство, а не метод
+                max_depth = rf_model.getMaxDepth  # Это тоже свойство, без ()
+                print(f"DEBUG: numTrees={num_trees}, maxDepth={max_depth}")
+                mlflow.log_param("best_numTrees", num_trees)
+                mlflow.log_param("best_maxDepth", max_depth)
+            except Exception as e:
+                print(f"WARNING: Ошибка при получении параметров модели: {str(e)}")
+                print("DEBUG: Проверяем доступные атрибуты модели:")
+                for attr in dir(rf_model):
+                    if not attr.startswith('_'):
+                        print(f"DEBUG: Атрибут: {attr}")
+                # Продолжаем выполнение даже если не удалось получить параметры
 
             # Log the model
             print("DEBUG: Сохраняем модель в MLflow")
