@@ -12,7 +12,7 @@ from mlflow.tracking import MlflowClient
 from pyspark.sql import SparkSession
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import VectorAssembler, StandardScaler
-from pyspark.ml.classification import RandomForestClassifier, LogisticRegression
+from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator
 from pyspark.ml.tuning import ParamGridBuilder, CrossValidator
 
@@ -51,7 +51,7 @@ def create_spark_session(s3_config=None):
         )
 
     # Создаем и возвращаем сессию Spark
-    return builder.getOrCreate()
+    return builder
 
 
 def load_data(spark, input_path):
@@ -140,27 +140,17 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
     )
 
     # Select model based on type
-    if model_type == "rf":
-        classifier = RandomForestClassifier(
-            labelCol="fraud",
-            featuresCol="features",
-            numTrees=10,
-            maxDepth=5
-        )
-        param_grid = ParamGridBuilder() \
-            .addGrid(classifier.numTrees, [10, 20, 30]) \
-            .addGrid(classifier.maxDepth, [5, 10, 15]) \
-            .build()
-    else:  # Logistic Regression
-        classifier = LogisticRegression(
-            labelCol="fraud",
-            featuresCol="features",
-            maxIter=10
-        )
-        param_grid = ParamGridBuilder() \
-            .addGrid(classifier.regParam, [0.01, 0.1, 0.5]) \
-            .addGrid(classifier.elasticNetParam, [0.0, 0.5, 1.0]) \
-            .build()
+    classifier = RandomForestClassifier(
+        labelCol="fraud",
+        featuresCol="features",
+        numTrees=10,
+        maxDepth=5
+    )
+    param_grid = (ParamGridBuilder()
+        .addGrid(classifier.numTrees, [10, 20])
+        .addGrid(classifier.maxDepth, [5, 10])
+        .build()
+    )
 
     # Create pipeline
     pipeline = Pipeline(stages=[assembler, scaler, classifier])
@@ -196,13 +186,8 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
         print(f"MLflow Run ID: {run_id}")
 
         # Log model parameters
-        mlflow.log_param("model_type", model_type)
-        if model_type == "rf":
-            mlflow.log_param("numTrees_options", [10, 20, 30])
-            mlflow.log_param("maxDepth_options", [5, 10, 15])
-        else:
-            mlflow.log_param("regParam_options", [0.01, 0.1, 0.5])
-            mlflow.log_param("elasticNetParam_options", [0.0, 0.5, 1.0])
+        mlflow.log_param("numTrees_options", [10, 20, 30])
+        mlflow.log_param("maxDepth_options", [5, 10, 15])
 
         # Train the model
         print("Training model...")
@@ -224,14 +209,9 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
         mlflow.log_metric("f1", f1)
 
         # Log best model parameters
-        if model_type == "rf":
-            rf_model = best_model.stages[-1]
-            mlflow.log_param("best_numTrees", rf_model.getNumTrees)
-            mlflow.log_param("best_maxDepth", rf_model.getMaxDepth())
-        else:
-            lr_model = best_model.stages[-1]
-            mlflow.log_param("best_regParam", lr_model.getRegParam())
-            mlflow.log_param("best_elasticNetParam", lr_model.getElasticNetParam())
+        rf_model = best_model.stages[-1]
+        mlflow.log_param("best_numTrees", rf_model.getNumTrees)
+        mlflow.log_param("best_maxDepth", rf_model.getMaxDepth())
 
         # Log the model
         mlflow.spark.log_model(best_model, "model")
@@ -447,7 +427,6 @@ def main():
     # Основные параметры
     parser.add_argument("--input", required=True, help="Input data path")
     parser.add_argument("--output", required=True, help="Output model path")
-    parser.add_argument("--model-type", choices=["rf", "lr"], default="rf", help="Model type")
 
     # MLflow параметры
     parser.add_argument("--tracking-uri", help="MLflow tracking URI")
@@ -483,7 +462,7 @@ def main():
     mlflow.set_experiment(args.experiment_name)
 
     # Create Spark session
-    spark = create_spark_session(s3_config)
+    spark = create_spark_session(s3_config).getOrCreate()
 
     try:
         # Load and prepare data

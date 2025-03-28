@@ -132,24 +132,20 @@ def upload_to_s3(df, filename="fraud_data.csv"):
     )
 
     # Временный файл для загрузки
-    temp_file = f"data/{filename}"
-    df.to_csv(temp_file, index=False)
+    input_data_path = os.path.join("data", "input_data", filename)
+    df.to_csv(input_data_path, index=False)
 
     # Загружаем файл в S3
     bucket_name = os.getenv("S3_BUCKET_NAME")
     s3_key = f"input_data/{filename}"
 
     try:
-        s3_client.upload_file(temp_file, bucket_name, s3_key)
+        s3_client.upload_file(input_data_path, bucket_name, s3_key)
         print(f"Данные успешно загружены в s3://{bucket_name}/{s3_key}")
         return True
     except Exception as e:
         print(f"Ошибка при загрузке данных в S3: {e}")
         return False
-    finally:
-        # Удаляем временный файл
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
 
 
 def main():
@@ -166,11 +162,15 @@ def main():
 
     # Загружаем обучающую выборку
     train_filename = "train.csv"
-    if upload_to_s3(train_df, train_filename):
+
+    try:
+        upload_to_s3(train_df, train_filename)
         print(f"Обучающая выборка ({len(train_df)} записей) успешно загружена.")
+    except Exception as e:
+        print(f"Ошибка при загрузке обучающей выборки: {e}")
 
     print(
-        f"Всего сгенерировано {len(df)} записей, из них {df['fraud'].sum()}"
+        f"Всего сгенерировано {len(df)} записей, из них {df['fraud'].sum()} "
         f"мошеннических транзакций ({df['fraud'].mean()*100:.2f}%)."
     )
 

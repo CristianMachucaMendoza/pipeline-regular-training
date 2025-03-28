@@ -27,10 +27,10 @@ S3_ENDPOINT_URL = Variable.get("S3_ENDPOINT_URL")
 S3_ACCESS_KEY = Variable.get("S3_ACCESS_KEY")
 S3_SECRET_KEY = Variable.get("S3_SECRET_KEY")
 S3_BUCKET_NAME = Variable.get("S3_BUCKET_NAME")
-S3_INPUT_DATA_BUCKET = f"s3a://{S3_BUCKET_NAME}/data/"  # Путь к данным
-S3_OUTPUT_MODEL_BUCKET = f"s3a://{S3_BUCKET_NAME}/models/"    # Путь для сохранения моделей
-S3_SRC_BUCKET = f"s3a://{S3_BUCKET_NAME}/src"               # Путь к исходному коду
-S3_DP_LOGS_BUCKET = f"s3a://{S3_BUCKET_NAME}/airflow_logs/"  # Путь для логов Data Proc
+S3_INPUT_DATA_BUCKET = f"s3a://{S3_BUCKET_NAME}/input_data"     # Путь к данным
+S3_OUTPUT_MODEL_BUCKET = f"s3a://{S3_BUCKET_NAME}/models"       # Путь для сохранения моделей
+S3_SRC_BUCKET = f"s3a://{S3_BUCKET_NAME}/src"                   # Путь к исходному коду
+S3_DP_LOGS_BUCKET = f"s3a://{S3_BUCKET_NAME}/airflow_logs/"     # Путь для логов Data Proc
 S3_VENV_ARCHIVE = f"s3a://{S3_BUCKET_NAME}/venvs/venv.tar.gz"
 
 # Переменные необходимые для создания Dataproc кластера
@@ -164,21 +164,20 @@ with DAG(
     # Запуск PySpark задания для обучения модели
     train_model = DataprocCreatePysparkJobOperator(
         task_id="train",
-        main_python_file_uri=f"{S3_SRC_BUCKET}/test.py",
+        main_python_file_uri=f"{S3_SRC_BUCKET}/train.py",
         connection_id=YC_SA_CONNECTION.conn_id,
         dag=dag,
-        # args=[
-        #     "--input", f"{S3_INPUT_DATA_BUCKET}train.csv",
-        #     "--output", f"{S3_OUTPUT_MODEL_BUCKET}model_{datetime.now().strftime('%Y%m%d')}",
-        #     "--model-type", "rf",
-        #     "--tracking-uri", MLFLOW_TRACKING_URI,
-        #     "--experiment-name", MLFLOW_EXPERIMENT_NAME,
-        #     "--auto-register",  # Включаем автоматическую регистрацию лучшей модели
-        #     "--s3-endpoint-url", S3_ENDPOINT_URL,
-        #     "--s3-access-key", S3_ACCESS_KEY,
-        #     "--s3-secret-key", S3_SECRET_KEY,
-        #     "--run-name", f"training_{datetime.now().strftime('%Y%m%d_%H%M')}"
-        # ],
+        args=[
+            "--input", f"{S3_INPUT_DATA_BUCKET}/train.csv",
+            "--output", f"{S3_OUTPUT_MODEL_BUCKET}/model_{datetime.now().strftime('%Y%m%d')}",
+            "--tracking-uri", MLFLOW_TRACKING_URI,
+            "--experiment-name", MLFLOW_EXPERIMENT_NAME,
+            "--auto-register",  # Включаем автоматическую регистрацию лучшей модели
+            "--s3-endpoint-url", S3_ENDPOINT_URL,
+            "--s3-access-key", S3_ACCESS_KEY,
+            "--s3-secret-key", S3_SECRET_KEY,
+            "--run-name", f"training_{datetime.now().strftime('%Y%m%d_%H%M')}"
+        ],
         properties={
             'spark.submit.deployMode': 'cluster',
             'spark.yarn.dist.archives': f'{S3_VENV_ARCHIVE}#.venv',

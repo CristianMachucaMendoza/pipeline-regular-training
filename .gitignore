@@ -27,3 +27,4 @@ venvs
 data/*.csv
 .temp_venv
 .cursor
+*.gz
