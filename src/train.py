@@ -125,9 +125,15 @@ def prepare_features(train_df, test_df):
     """
     print("DEBUG: Начинаем подготовку признаков")
     try:
-        # Identify feature columns (all except the target column 'fraud')
-        feature_cols = [col for col in train_df.columns if col != 'fraud']
-        print(f"DEBUG: Выбрано {len(feature_cols)} признаков: {feature_cols}")
+        # Получаем типы столбцов
+        print("DEBUG: Проверяем типы столбцов")
+        dtypes = dict(train_df.dtypes)
+        print(f"DEBUG: Типы данных: {dtypes}")
+
+        # Исключаем строковые столбцы и целевую переменную 'fraud'
+        feature_cols = [col for col in train_df.columns
+                        if col != 'fraud' and dtypes[col] != 'string']
+        print(f"DEBUG: Выбрано {len(feature_cols)} числовых признаков: {feature_cols}")
 
         # Проверим наличие нулевых значений
         print("DEBUG: Проверка наличия нулевых значений в обучающей выборке")
@@ -261,7 +267,7 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
             # Log best model parameters
             print("DEBUG: Получаем и логируем параметры лучшей модели")
             rf_model = best_model.stages[-1]
-            mlflow.log_param("best_numTrees", rf_model.getNumTrees)  # Здесь может быть ошибка!
+            mlflow.log_param("best_numTrees", rf_model.getNumTrees())  # Исправлено: добавлены скобки для вызова метода
             mlflow.log_param("best_maxDepth", rf_model.getMaxDepth())
 
             # Log the model
@@ -538,6 +544,9 @@ def main():
     parser.add_argument("--experiment-name", default="fraud_detection", help="MLflow exp name")
     parser.add_argument("--auto-register", action="store_true", help="Automatically register")
     parser.add_argument("--run-name", default=None, help="Name for the MLflow run")
+
+    # Отключение проверки Git для MLflow
+    os.environ['GIT_PYTHON_REFRESH'] = 'quiet'
 
     # S3 параметры
     parser.add_argument("--s3-endpoint-url", help="S3 endpoint URL")
