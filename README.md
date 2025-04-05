@@ -59,7 +59,7 @@ make apply
 Чтобы скрипт отработал необходимо создать виртуальное окружение и установить зависимости:
 
 ```bash
-python3.11 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
