@@ -56,6 +56,16 @@ make apply
 
 ### Шаг 2: Генерация демонстрационных данных
 
+Чтобы скрипт отработал необходимо создать виртуальное окружение и установить зависимости:
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Затем выполните скрипт для генерации синтетических данных:
+
 ```bash
 make create-data
 ```
@@ -121,26 +131,22 @@ make download-output-data-from-bucket
 ```
 /
 ├── dags/                  # Airflow DAGs
-│   └── fraud_detection_training.py
+│   └── training_pipeline.py
 ├── data/                  # Данные для обучения и результаты
 │   ├── input_data/        # Входные данные
 │   └── output_data/       # Результаты работы модели
 ├── infra/                 # Terraform конфигурация
-│   ├── main.tf
-│   ├── variables.tf 
-│   ├── outputs.tf
-│   └── terraform.tfvars.example
 ├── scripts/               # Вспомогательные скрипты
 │   ├── create_demo_data.py
-│   ├── create_venv_archive.sh
-│   └── upload_to_s3.sh
+│   └── create_venv_archive.sh
 ├── src/                   # Исходный код модели
-│   └── fraud_detection_model.py
+│   └── train.py
 ├── utils/                 # Утилиты
 │   └── push_secrets_to_github_repo.py
 ├── venvs/                 # Архивы виртуальных окружений
 ├── .env                   # Файл с переменными окружения
 ├── Makefile               # Makefile для автоматизации задач
+├── requirements.txt       # Зависимости Python
 └── README.md              # Это файл
 ```
 
