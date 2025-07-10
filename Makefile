@@ -41,6 +41,10 @@ upload-data-to-bucket:
 	s3cmd put --recursive data/input_data/*.csv s3://$(S3_BUCKET_NAME)/input_data/
 	@echo "Data uploaded successfully"
 
+.PHONY: upload-all
+upload-all: upload-data-to-bucket upload-src-to-bucket upload-dags-to-bucket
+	@echo "All files uploaded successfully to $(S3_BUCKET_NAME)"
+
 .PHONY: download-output-data-from-bucket
 download-output-data-from-bucket:
 	@echo "Downloading output data from $(S3_BUCKET_NAME)..."
