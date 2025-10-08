@@ -29,3 +29,4 @@ data/*.csv
 .cursor
 *.gz
 *.log
+notes.txt

@@ -607,7 +607,9 @@ def main():
         train_df, test_df, feature_cols = prepare_features(train_df, test_df)
 
         # Generate run name if not provided
-        run_name = args.run_name or f"fraud_detection_{args.model_type}_{os.path.basename(args.input)}"
+        run_name = (
+            args.run_name or f"fraud_detection_{args.model_type}_{os.path.basename(args.input)}"
+        )
         print(f"DEBUG: Run name: {run_name}")
 
         # Train the model

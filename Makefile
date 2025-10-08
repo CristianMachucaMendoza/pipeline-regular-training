@@ -76,7 +76,7 @@ sync-env:
 
 .PHONY: airflow-cluster-mon
 airflow-cluster-mon:
-	yc logging read --group-name=default --follow
+	yc logging read --group-name=default --follow 2>&1 | tee airflow_cluster.log
 
 .PHONY: create-data
 create-data:
