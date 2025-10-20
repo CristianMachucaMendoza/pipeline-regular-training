@@ -96,6 +96,12 @@ upload-venv-to-bucket:
 	s3cmd put venvs/venv.tar.gz s3://$(S3_BUCKET_NAME)/venvs/venv.tar.gz
 	@echo "Virtual environment archive uploaded successfully"
 
+.PHONY: move-parquet-data-to-bucket
+move-parquet-data-to-bucket:
+	@echo "Moving txt data to $(S3_BUCKET_NAME)..."
+	yc storage s3 cp s3://otus-machuca-bucket-b1gjlbg9jdvuumq3kui1/cleaned/2019-08-22.parquet/ s3://$(S3_BUCKET_NAME)/input_data/2019-08-22.parquet/  --recursive
+	@echo "parquet data uploaded successfully"
+
 .PHONY: deploy-full
 deploy-full: create-venv-archive upload-venv-to-bucket upload-src-to-bucket upload-dags-to-bucket upload-data-to-bucket
 	@echo "Full deployment completed successfully"

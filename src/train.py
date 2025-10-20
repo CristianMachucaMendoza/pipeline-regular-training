@@ -82,8 +82,8 @@ def load_data(spark, input_path):
     print(f"DEBUG: Начинаем загрузку данных из: {input_path}")
     try:
         # Load the data
-        print(f"DEBUG: Чтение CSV файла из {input_path}")
-        df = spark.read.csv(input_path, header=True, inferSchema=True)
+        print(f"DEBUG: Чтение parquet файла из {input_path}")
+        df = spark.read.parquet(input_path, header=True, inferSchema=True)
 
         # Print schema and basic statistics
         print("Dataset Schema:")
@@ -96,7 +96,7 @@ def load_data(spark, input_path):
 
         # Split the data into training and testing sets
         print("DEBUG: Разделение на обучающую и тестовую выборки")
-        train_df, test_df = df.randomSplit([0.8, 0.2], seed=42)
+        train_df, test_df = df.randomSplit([0.01, 0.01], seed=42)
         print(f"Training set size: {train_df.count()}")
         print(f"Testing set size: {test_df.count()}")
 
@@ -132,7 +132,7 @@ def prepare_features(train_df, test_df):
 
         # Исключаем строковые столбцы и целевую переменную 'fraud'
         feature_cols = [col for col in train_df.columns
-                        if col != 'fraud' and dtypes[col] != 'string']
+                        if col not in ('tx_fraud', 'tx_timestamp') and dtypes[col] != 'string']
         print(f"DEBUG: Выбрано {len(feature_cols)} числовых признаков: {feature_cols}")
 
         # Проверим наличие нулевых значений
@@ -186,7 +186,7 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
         # Select model based on type
         print("DEBUG: Создание классификатора")
         classifier = RandomForestClassifier(
-            labelCol="fraud",
+            labelCol="tx_fraud",
             featuresCol="features",
             numTrees=10,
             maxDepth=5
@@ -205,17 +205,17 @@ def train_model(train_df, test_df, feature_cols, model_type="rf", run_name="frau
         # Create evaluators
         print("DEBUG: Создание оценщиков")
         evaluator_auc = BinaryClassificationEvaluator(
-            labelCol="fraud",
+            labelCol="tx_fraud",
             rawPredictionCol="rawPrediction",
             metricName="areaUnderROC"
         )
         evaluator_acc = MulticlassClassificationEvaluator(
-            labelCol="fraud",
+            labelCol="tx_fraud",
             predictionCol="prediction",
             metricName="accuracy"
         )
         evaluator_f1 = MulticlassClassificationEvaluator(
-            labelCol="fraud",
+            labelCol="tx_fraud",
             predictionCol="prediction",
             metricName="f1"
         )

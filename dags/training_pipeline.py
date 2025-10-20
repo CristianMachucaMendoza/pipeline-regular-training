@@ -150,10 +150,10 @@ with DAG(
         datanode_resource_preset="s3-c4-m16",
         datanode_disk_type="network-ssd",
         datanode_disk_size=50,
-        datanode_count=1,
+        datanode_count=4,
 
         # computenodes
-        computenode_count=0,
+        computenode_count=2,
 
         # software
         services=["YARN", "SPARK", "HDFS", "MAPREDUCE"],
@@ -168,7 +168,7 @@ with DAG(
         connection_id=YC_SA_CONNECTION.conn_id,
         dag=dag,
         args=[
-            "--input", f"{S3_INPUT_DATA_BUCKET}/train.csv",
+            "--input", f"{S3_INPUT_DATA_BUCKET}/2019-08-22.parquet",
             "--output", f"{S3_OUTPUT_MODEL_BUCKET}/model_{datetime.now().strftime('%Y%m%d')}",
             "--tracking-uri", MLFLOW_TRACKING_URI,
             "--experiment-name", MLFLOW_EXPERIMENT_NAME,
