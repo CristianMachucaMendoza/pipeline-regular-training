@@ -117,7 +117,7 @@ with DAG(
     dag_id="training_pipeline",
     default_args=default_args,
     description="Periodic training of fraud detection model",
-    schedule_interval=timedelta(minutes=60),  # Запуск каждые 60 минут
+    schedule_interval=timedelta(minutes=30),  # Запуск каждые 60 минут
     start_date=datetime(2025, 3, 27),
     catchup=False,
     tags=['mlops', ],
@@ -173,6 +173,7 @@ with DAG(
             "--tracking-uri", MLFLOW_TRACKING_URI,
             "--experiment-name", MLFLOW_EXPERIMENT_NAME,
             "--auto-register",  # Включаем автоматическую регистрацию лучшей модели
+            "--ab-testing",
             "--s3-endpoint-url", S3_ENDPOINT_URL,
             "--s3-access-key", S3_ACCESS_KEY,
             "--s3-secret-key", S3_SECRET_KEY,
